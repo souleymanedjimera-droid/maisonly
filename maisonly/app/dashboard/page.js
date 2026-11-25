@@ -46,6 +46,7 @@ export default function Dashboard() {
   useEffect(() => { load(); }, [load]);
 
   const actif = ag && new Date(ag.abonnement_fin) > new Date();
+  const jours = ag ? Math.max(0, Math.ceil((new Date(ag.abonnement_fin) - new Date()) / 864e5)) : 0;
   useEffect(() => { // après retour de PayDunya, on attend la confirmation du webhook
     if (ag && !actif && location.search.includes('paiement')) {
       setMsg('Paiement en cours de confirmation…');
@@ -84,25 +85,28 @@ export default function Dashboard() {
   const vue = actif ? tab : 'abo';
   const tabs = [['loy', 'Loyers'], ['biens', 'Biens'], ['ann', 'Annonces'], ['loc', 'Locataires'], ['abo', 'Abonnement']];
   const encaisse = pays.reduce((s, p) => s + p.montant, 0);
+  const attendu = locs.reduce((s, l) => s + (bien(l.bien_id)?.loyer || 0), 0);
 
   return (
     <main className="w">
-      <div className="row"><h2>Maisonly · {ag.nom}</h2><button className="g" onClick={() => supabase.auth.signOut().then(() => location.href = '/')}>Déconnexion</button></div>
-      <div className="row" style={{ justifyContent: 'flex-start', margin: '12px 0' }}>
-        {tabs.map(([k, l]) => <button key={k} className={vue === k ? 'on' : 'g'} disabled={!actif && k !== 'abo'} onClick={() => setTab(k)}>{l}</button>)}
+      <div className="row"><span className="logo"><i>M</i>{ag.nom}</span><button className="g" onClick={() => supabase.auth.signOut().then(() => location.href = '/')}>Déconnexion</button></div>
+      <div className="tabs">
+        {tabs.map(([k, l]) => <button key={k} className={vue === k ? 'on' : ''} disabled={!actif && k !== 'abo'} onClick={() => setTab(k)}>{l}</button>)}
       </div>
+      {actif && jours <= 10 && <div className="card" style={{ background: 'var(--ac)', color: '#0f1b2d', border: 0 }}><b>Il vous reste {jours} jour{jours > 1 ? 's' : ''} d'accès.</b> Passez à l'abonnement pour continuer sans interruption. <button className="g" style={{ color: '#0f1b2d', borderColor: '#0f1b2d', marginLeft: 8 }} onClick={() => setTab('abo')}>Voir l'abonnement</button></div>}
       {msg && <p className="err">{msg}</p>}
 
       {vue === 'loy' && <div className="card">
-        <h3>Loyers de {mois()} · encaissé : {f(encaisse)}</h3>
+        <h3 style={{ marginBottom: 12 }}>Loyers de {mois()}</h3>
+        <div className="kpi"><div><b>{f(attendu)}</b><span>Attendu</span></div><div><b>{f(encaisse)}</b><span>Encaissé</span></div><div><b style={{ color: 'var(--rd)' }}>{f(Math.max(0, attendu - encaisse))}</b><span>Impayés</span></div></div>
         {locs.map(l => {
           const b = bien(l.bien_id), p = pays.find(x => x.locataire_id === l.id);
           const txt = encodeURIComponent(`Bonjour ${l.nom}, le loyer de ${mois()} (${f(b?.loyer)}) n'a pas encore été réglé. Vous pouvez payer par Wave ou Orange Money. Merci. – ${ag.nom}`);
           return <div className="it" key={l.id}>
-            <div><b>{l.nom}</b> {p ? '✅ Payé' : '⏳ Impayé'}<br /><span className="mu">{b?.nom} · {f(b?.loyer)}</span></div>
+            <div><b>{l.nom}</b> <span className={'st' + (p ? '' : ' r')}>{p ? 'Payé' : 'Impayé'}</span><br /><span className="mu">{b?.nom} · {f(b?.loyer)}</span></div>
             {!p && <div className="row">
               <button onClick={() => ins('paiements', { locataire_id: l.id, bien_id: l.bien_id, mois: mois(), montant: b?.loyer || 0 })}>Encaisser</button>
-              <a href={`https://wa.me/${(l.tel || '').replace(/\D/g, '')}?text=${txt}`} target="_blank" rel="noreferrer"><button className="g">Relancer</button></a>
+              <a href={`https://wa.me/${(l.tel || '').replace(/\D/g, '')}?text=${txt}`} target="_blank" rel="noreferrer"><button className="wa">Relancer</button></a>
             </div>}
           </div>;
         })}
@@ -131,7 +135,7 @@ export default function Dashboard() {
 
       {vue === 'abo' && <div className="card">
         <h3>Abonnement Maisonly</h3>
-        <p>{actif ? `Actif jusqu'au ${new Date(ag.abonnement_fin).toLocaleDateString('fr-FR')}` : 'Inactif : payez pour activer votre agence.'}</p>
+        <p>{actif ? `Actif jusqu'au ${new Date(ag.abonnement_fin).toLocaleDateString('fr-FR')} (${jours} jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''})` : 'Votre accès est terminé : payez pour réactiver votre agence. Vos données sont conservées.'}</p>
         <p className="mu">25 000 FCFA par mois, par Wave ou Orange Money.</p>
         <button onClick={payer}>{actif ? 'Renouveler' : 'Payer'} 25 000 FCFA</button>
       </div>}
